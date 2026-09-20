@@ -1,5 +1,6 @@
 "use client"
 import React, { useState } from 'react'
+import { adminStatusLabel } from '../lib/status'
 
 export interface Request {
   id: string
@@ -16,77 +17,51 @@ export interface Request {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { bg: string; text: string; border: string; label: string; dot: string }> = {
-    pending: {
-      bg: 'bg-amber-50',
-      text: 'text-amber-800',
-      border: 'border-amber-200',
-      label: 'Pending AI',
-      dot: 'bg-amber-500',
-    },
-    ai_responded: {
-      bg: 'bg-indigo-50',
-      text: 'text-indigo-800',
-      border: 'border-indigo-200',
-      label: 'AI Responded',
-      dot: 'bg-indigo-500',
-    },
-    resolved: {
-      bg: 'bg-emerald-50',
-      text: 'text-emerald-800',
-      border: 'border-emerald-200',
-      label: 'Resolved',
-      dot: 'bg-emerald-500',
-    },
+  if (status === 'resolved') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        Resolved
+      </span>
+    )
   }
-
-  const conf = map[status] || {
-    bg: 'bg-slate-50',
-    text: 'text-slate-700',
-    border: 'border-slate-200',
-    label: status.replace('_', ' '),
-    dot: 'bg-slate-400',
+  if (status === 'ai_responded') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">
+        <span className="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+        In Review
+      </span>
+    )
   }
-
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-semibold rounded-md border ${conf.bg} ${conf.text} ${conf.border}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${conf.dot}`}></span>
-      {conf.label}
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
+      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+      New Request
     </span>
   )
 }
 
-function CategoryBadge({ category }: { category?: string | null }) {
-  if (!category) return null
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md bg-purple-50 text-purple-700 border border-purple-200/80">
-      <span className="text-[11px]">🏷️</span> {category}
-    </span>
-  )
-}
-
-function UrgencyFlag({ urgency }: { urgency?: string | null }) {
+function UrgencyBadge({ urgency }: { urgency?: string | null }) {
   if (!urgency) return null
   const u = urgency.toLowerCase()
-
   if (u === 'high') {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-md bg-rose-50 text-rose-800 border border-rose-200">
-        <span className="h-1.5 w-1.5 rounded-full bg-rose-600 animate-pulse"></span>
-        High Urgency
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 uppercase tracking-wider text-[10px]">
+        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+        High Priority
       </span>
     )
   }
   if (u === 'medium') {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md bg-amber-50 text-amber-800 border border-amber-200/70">
-        Med Urgency
+      <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/25">
+        Medium
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md bg-slate-100 text-slate-600 border border-slate-200">
-      Low Urgency
+    <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-stone-800 text-stone-300 border border-white/10">
+      Low
     </span>
   )
 }
@@ -99,181 +74,182 @@ function formatRelativeTime(dateString: string) {
     if (diffMins < 60) return `${diffMins}m ago`
     const diffHours = Math.floor(diffMins / 60)
     if (diffHours < 24) return `${diffHours}h ago`
-    const diffDays = Math.floor(diffHours / 24)
-    return `${diffDays}d ago`
+    return `${Math.floor(diffHours / 24)}d ago`
   } catch {
     return dateString
   }
 }
 
-export default function RequestCard({ item, onResolved }: { item: Request; onResolved?: (id: string) => void }) {
+function formatDateFull(dateString: string) {
+  try {
+    return new Date(dateString).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return dateString
+  }
+}
+
+export default function RequestCard({
+  item,
+  onStatusChange,
+}: {
+  item: Request
+  onStatusChange?: (id: string, status: string) => void
+}) {
   const [open, setOpen] = useState(false)
-  const [resolving, setResolving] = useState(false)
+  const [updating, setUpdating] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
 
-  async function handleResolve() {
+  async function updateStatus(status: string) {
     setActionError(null)
-    if (!confirm(`Mark ticket "${item.subject}" as resolved?`)) return
-    setResolving(true)
-
+    setUpdating(true)
     try {
-      const res = await fetch(`/api/requests/${item.id}/resolve`, {
-        method: 'POST',
+      const res = await fetch(`/api/admin/requests/${item.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
       })
-
       const data = await res.json().catch(() => null)
-
-      if (!res.ok) {
-        const errorMsg = data?.error || `Server responded with status ${res.status}`
-        throw new Error(errorMsg)
-      }
-
-      onResolved?.(item.id)
+      if (!res.ok) throw new Error(data?.error || `Status ${res.status}`)
+      onStatusChange?.(item.id, status)
     } catch (err: any) {
-      console.error('[RequestCard] Resolve error:', err)
-      const message = err.message || 'Unknown resolution error'
-      setActionError(message)
-      alert(`Could not resolve ticket: ${message}`)
+      setActionError(err.message || 'Could not update status')
     } finally {
-      setResolving(false)
+      setUpdating(false)
     }
   }
 
-  function handleCopyResponse() {
-    if (!item.ai_response) return
-    navigator.clipboard.writeText(item.ai_response)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const isResolved = item.status === 'resolved'
   const initials = item.name ? item.name.slice(0, 2).toUpperCase() : 'CU'
 
   return (
-    <div
-      className={`bg-white rounded-xl border transition-all duration-150 shadow-sm p-4 sm:p-5 ${
-        isResolved ? 'border-slate-200 bg-slate-50/40 opacity-90' : 'border-slate-200/90 hover:border-slate-300'
-      }`}
-    >
-      {/* Top Header Row: Metadata & Badges */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-        <div className="space-y-2 flex-1 min-w-0">
-          {/* Metadata bar */}
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 font-mono">
-            <span className="font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
+    <div className={`bg-stone-900/90 rounded-2xl border border-white/10 p-5 sm:p-6 transition-all duration-200 hover:border-white/20 shadow-lg ${item.status === 'resolved' ? 'opacity-85' : ''}`}>
+      {/* Header Info */}
+      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+        <div className="space-y-2.5 flex-1 min-w-0">
+          {/* Metadata Bar */}
+          <div className="flex flex-wrap items-center gap-2.5 text-xs text-stone-400">
+            <span className="font-mono font-bold text-stone-300 bg-black/40 px-2 py-0.5 rounded border border-white/5">
               #{item.id.slice(0, 8)}
             </span>
-            <span className="text-slate-300">•</span>
-            <span className="shrink-0" title={new Date(item.created_at).toLocaleString()}>{formatRelativeTime(item.created_at)}</span>
-            <span className="text-slate-300">•</span>
-            <div className="flex items-center gap-1.5 text-slate-600 font-sans min-w-0">
-              <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[10px] font-bold font-mono shrink-0">
+            <span>·</span>
+            <span>{formatRelativeTime(item.created_at)}</span>
+            <span>·</span>
+            <div className="flex items-center gap-1.5 text-stone-200">
+              <span className="w-5 h-5 rounded-full bg-white/10 text-white flex items-center justify-center text-[10px] font-bold">
                 {initials}
               </span>
-              <span className="font-medium text-slate-800 truncate max-w-[120px] sm:max-w-none">{item.name}</span>
-              <span className="text-slate-400 text-[11px] truncate max-w-[130px] sm:max-w-none hidden xs:inline">({item.email})</span>
+              <span className="font-semibold text-white truncate max-w-[140px] sm:max-w-none">{item.name}</span>
+              <span className="text-stone-400 text-[11px] font-mono truncate max-w-[200px]">({item.email})</span>
             </div>
           </div>
 
-          {/* Primary Subject Line */}
-          <div className="pt-0.5">
-            <h3 className="text-base font-display font-semibold text-slate-900 tracking-tight leading-snug break-words">
-              {item.subject}
-            </h3>
-          </div>
+          {/* Subject */}
+          <h3 className="text-base sm:text-lg font-display font-bold text-white leading-snug break-words">
+            {item.subject}
+          </h3>
 
-          {/* Badge Cluster */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          {/* Triage Classification Badges */}
+          <div className="flex flex-wrap items-center gap-2 pt-0.5">
             <StatusBadge status={item.status} />
-            <CategoryBadge category={item.category} />
-            <UrgencyFlag urgency={item.urgency} />
+            {item.category && (
+              <span className="inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                {item.category}
+              </span>
+            )}
+            <UrgencyBadge urgency={item.urgency} />
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2 w-full sm:w-auto pt-2 sm:pt-0">
-          <button
-            onClick={() => setOpen(o => !o)}
-            className="flex-1 sm:flex-initial text-center justify-center text-xs px-3 py-2 sm:py-1.5 border border-slate-300 rounded-lg hover:bg-slate-50 font-medium text-slate-700 transition active:scale-[0.98]"
-          >
-            {open ? 'Hide Panel ▲' : 'View Draft ▼'}
-          </button>
+        {/* Action Controls */}
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0 pt-2 lg:pt-0">
+          {item.status !== 'resolved' ? (
+            <button
+              type="button"
+              disabled={updating}
+              onClick={() => updateStatus('resolved')}
+              className="inline-flex items-center gap-1 text-xs px-3.5 py-2 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-semibold border border-emerald-500/30 transition disabled:opacity-50"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+              </svg>
+              <span>Quick Resolve</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={updating}
+              onClick={() => updateStatus('pending')}
+              className="inline-flex items-center gap-1 text-xs px-3.5 py-2 rounded-full bg-white/10 hover:bg-white/15 text-stone-300 font-semibold border border-white/10 transition disabled:opacity-50"
+            >
+              <span>Reopen Ticket</span>
+            </button>
+          )}
 
-          <button
-            onClick={handleResolve}
-            disabled={resolving || isResolved}
-            className={`flex-1 sm:flex-initial text-center justify-center text-xs px-3.5 py-2 sm:py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5 shadow-sm active:scale-[0.98] ${
-              isResolved
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80 cursor-default'
-                : 'bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50'
-            }`}
+          {/* Status Dropdown */}
+          <select
+            disabled={updating}
+            value={item.status}
+            onChange={e => updateStatus(e.target.value)}
+            className="text-xs border border-white/15 rounded-full px-3 py-2 bg-black/60 text-stone-200 focus:outline-none focus:border-white/40"
           >
-            {resolving ? (
-              <>
-                <svg className="animate-spin h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                </svg>
-                Resolving...
-              </>
-            ) : isResolved ? (
-              '✓ Resolved'
-            ) : (
-              'Resolve Ticket'
-            )}
+            <option value="pending">Status: New</option>
+            <option value="ai_responded">Status: In Review</option>
+            <option value="resolved">Status: Resolved</option>
+          </select>
+
+          {/* Expand/Collapse */}
+          <button
+            type="button"
+            onClick={() => setOpen(o => !o)}
+            className="text-xs px-3.5 py-2 border border-white/15 rounded-full hover:bg-white/10 font-semibold text-stone-200 transition"
+          >
+            {open ? 'Hide Conversation' : 'Inspect Thread'}
           </button>
         </div>
       </div>
 
       {actionError && (
-        <div className="mt-3 rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs text-rose-700">
-          ❌ {actionError}
+        <div className="mt-3 rounded-xl bg-rose-500/10 border border-rose-500/20 p-2.5 text-xs text-rose-300">
+          {actionError}
         </div>
       )}
 
-      {/* Expanded Split View Drawer */}
+      {/* Expanded Inspector Panel */}
       {open && (
-        <div className="mt-4 border-t border-slate-200/80 pt-4 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Left: Customer Message */}
-            <div className="bg-slate-50/80 border border-slate-200 rounded-lg p-3.5 space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-500 font-mono font-medium uppercase tracking-wider">
-                <span>Customer Query</span>
-                <span>{item.email}</span>
-              </div>
-              <p className="text-xs sm:text-sm text-slate-800 whitespace-pre-wrap leading-relaxed font-sans">
-                {item.message}
-              </p>
+        <div className="mt-5 border-t border-white/10 pt-5 grid grid-cols-1 lg:grid-cols-2 gap-4 animate-fade-in">
+          {/* Customer Message Details */}
+          <div className="bg-black/40 border border-white/10 rounded-2xl p-4.5 space-y-2">
+            <div className="flex items-center justify-between text-xs text-stone-400 font-semibold border-b border-white/5 pb-2">
+              <span className="uppercase tracking-wider text-[10px] text-stone-400">Customer Message</span>
+              <span className="text-[11px]">{formatDateFull(item.created_at)}</span>
             </div>
+            <p className="text-sm text-stone-200 whitespace-pre-wrap leading-relaxed">
+              {item.message}
+            </p>
+          </div>
 
-            {/* Right: AI Assistant Reply */}
-            <div className="bg-indigo-50/50 border border-indigo-200/70 rounded-lg p-3.5 space-y-2">
-              <div className="flex items-center justify-between text-xs text-indigo-900 font-mono font-semibold uppercase tracking-wider">
-                <span className="flex items-center gap-1.5">
-                  <span>🤖</span> AI Proposed Response
-                </span>
-                {item.ai_response && (
-                  <button
-                    onClick={handleCopyResponse}
-                    className="text-[11px] text-indigo-700 hover:text-indigo-900 underline font-sans"
-                  >
-                    {copied ? 'Copied! ✓' : 'Copy'}
-                  </button>
-                )}
+          {/* Automated / AI Response Details */}
+          <div className="bg-stone-950 border border-white/15 rounded-2xl p-4.5 space-y-2">
+            <div className="flex items-center justify-between text-xs text-stone-400 font-semibold border-b border-white/5 pb-2">
+              <div className="flex items-center gap-1.5 text-emerald-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <span className="uppercase tracking-wider text-[10px]">Triage Generated Response</span>
               </div>
-              <p className="text-xs sm:text-sm text-slate-800 whitespace-pre-wrap leading-relaxed font-sans">
-                {item.ai_response || (
-                  <span className="text-slate-400 italic">No automated response has been generated yet.</span>
-                )}
-              </p>
+              <span className="text-[11px] text-stone-500">Autonomous</span>
             </div>
+            <p className="text-sm text-stone-200 whitespace-pre-wrap leading-relaxed">
+              {item.ai_response || (
+                <span className="text-stone-500 italic">No automated response was generated for this ticket.</span>
+              )}
+            </p>
           </div>
         </div>
       )}
     </div>
   )
 }
-
-

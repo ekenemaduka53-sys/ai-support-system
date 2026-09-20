@@ -1,6 +1,7 @@
 "use client"
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { customerStatusLabel } from '../lib/status'
 
 interface SubmittedTicket {
   id: string
@@ -10,20 +11,45 @@ interface SubmittedTicket {
   message: string
   ai_response?: string | null
   status: string
-  category?: string | null
-  urgency?: string | null
   created_at?: string
 }
+
+const TOPICS = [
+  'Billing & Invoicing',
+  'Technical Support',
+  'Account & Security',
+  'Feature Inquiries',
+  'General Assistance',
+]
 
 export default function SupportForm() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [selectedTopic, setSelectedTopic] = useState('')
   const [subject, setSubject] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submittedTicket, setSubmittedTicket] = useState<SubmittedTicket | null>(null)
-  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/auth/session')
+      .then(r => r.json())
+      .then(data => {
+        if (data.customer) {
+          setEmail(data.customer.email || '')
+          setName(data.customer.name || '')
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  function handleSelectTopic(topic: string) {
+    setSelectedTopic(topic)
+    if (!subject || TOPICS.some(t => subject.startsWith(t))) {
+      setSubject(`${topic}: `)
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -41,203 +67,223 @@ export default function SupportForm() {
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to submit support request')
+        throw new Error(data.error || 'Could not process your request')
       }
 
       setSubmittedTicket(data.request)
-      setName('')
-      setEmail('')
       setSubject('')
       setMessage('')
+      setSelectedTopic('')
     } catch (err: any) {
-      setError(err.message || 'Submission error')
+      setError(err.message || 'Something went wrong while submitting your request')
     } finally {
       setLoading(false)
     }
   }
 
-  function handleCopyResponse() {
-    if (!submittedTicket?.ai_response) return
-    navigator.clipboard.writeText(submittedTicket.ai_response)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  function UrgencyBadge({ urgency }: { urgency?: string | null }) {
-    if (!urgency) return null
-    const map: Record<string, string> = {
-      low: 'bg-slate-100 text-slate-700 border-slate-200',
-      medium: 'bg-amber-50 text-amber-800 border-amber-200',
-      high: 'bg-rose-50 text-rose-800 border-rose-200',
-    }
-    return (
-      <span className={`text-xs px-2.5 py-0.5 rounded-md font-medium border ${map[urgency.toLowerCase()] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
-        Urgency: {urgency}
-      </span>
-    )
-  }
-
   return (
     <div className="space-y-6">
-      {/* Real-time Result Card */}
+      {/* Response Card when ticket is submitted */}
       {submittedTicket && (
-        <div className="bg-white border-2 border-emerald-300 rounded-xl p-5 shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-emerald-700 font-bold text-base">✓</span>
-              <h3 className="font-display font-bold text-slate-900 text-base">Ticket Successfully Ingested</h3>
-            </div>
-            <div className="flex items-center gap-2 font-mono text-xs">
-              <span className="text-slate-500">Ticket ID:</span>
-              <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-800 font-semibold border border-slate-200">
-                #{submittedTicket.id.slice(0, 8)}
+        <div className="bg-[#0E111A]/90 border border-teal-500/30 rounded-2xl p-6 space-y-5 animate-fade-in shadow-2xl backdrop-blur-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-white/10">
+            <div className="flex items-center gap-2.5">
+              <span className="w-8 h-8 rounded-full bg-teal-500/20 border border-teal-500/40 text-teal-300 flex items-center justify-center text-xs font-bold shadow-sm">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
               </span>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2 items-center text-xs">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200">
-              <span className="h-1.5 w-1.5 rounded-full bg-indigo-500"></span>
-              Status: {submittedTicket.status.replace('_', ' ')}
-            </span>
-            {submittedTicket.category && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-md font-medium bg-purple-50 text-purple-700 border border-purple-200">
-                🏷️ {submittedTicket.category}
-              </span>
-            )}
-            <UrgencyBadge urgency={submittedTicket.urgency} />
-          </div>
-
-          {submittedTicket.ai_response ? (
-            <div className="bg-indigo-50/50 rounded-xl p-4 border border-indigo-200/80 shadow-sm space-y-2">
-              <div className="flex items-center justify-between text-xs font-mono font-semibold text-indigo-950 uppercase tracking-wider">
-                <span className="flex items-center gap-1.5">
-                  <span>🤖</span> Gemini Automated Response
-                </span>
-                <button
-                  onClick={handleCopyResponse}
-                  className="text-indigo-700 hover:text-indigo-900 underline font-sans text-xs font-medium"
-                >
-                  {copied ? 'Copied! ✓' : 'Copy Text'}
-                </button>
+              <div>
+                <h3 className="font-display font-bold text-white text-base leading-tight">Request Received</h3>
+                <p className="text-[11px] text-stone-400 font-mono">#{submittedTicket.id.slice(0, 8)}</p>
               </div>
-              <p className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">
+            </div>
+
+            <span className="self-start sm:self-auto inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-300 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/25 shadow-sm">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              {customerStatusLabel(submittedTicket.status)}
+            </span>
+          </div>
+
+          {/* Inquiry summary */}
+          <div className="rounded-xl bg-white/[0.04] border border-white/10 p-4 space-y-1.5 text-xs">
+            <span className="font-semibold uppercase tracking-wider text-teal-400 text-[10px]">Your Question</span>
+            <p className="font-semibold text-white text-sm">{submittedTicket.subject}</p>
+            <p className="text-stone-300 whitespace-pre-wrap leading-relaxed">{submittedTicket.message}</p>
+          </div>
+
+          {/* Instant Reply Box */}
+          {submittedTicket.ai_response ? (
+            <div className="bg-gradient-to-b from-[#171A27] to-[#121522] border border-white/15 text-white rounded-2xl p-5 space-y-3 shadow-xl">
+              <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-teal-400"></span>
+                  <span className="text-xs font-semibold text-stone-200">Harbor Concierge Resolution</span>
+                </div>
+                <span className="text-[11px] text-teal-300 font-bold uppercase tracking-wider">Instant Reply</span>
+              </div>
+              <p className="text-sm text-stone-100 whitespace-pre-wrap leading-relaxed">
                 {submittedTicket.ai_response}
               </p>
             </div>
           ) : (
-            <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 text-xs text-amber-800">
-              ⏳ The AI response draft is currently processing. You can monitor its status on the support queue.
+            <div className="bg-white/[0.03] rounded-xl p-4 border border-white/10 text-center space-y-1">
+              <p className="text-sm font-semibold text-white">Your reply is being generated</p>
+              <p className="text-xs text-stone-400">
+                A full written response will appear in your private inbox in just a few moments.
+              </p>
             </div>
           )}
 
+          {/* Actions */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             <Link
               href="/dashboard"
-              className="inline-flex items-center px-4 py-2 text-xs font-semibold bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition shadow-sm"
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold bg-gradient-to-r from-indigo-500 via-purple-600 to-teal-400 text-white rounded-full hover:opacity-95 transition shadow-lg shadow-indigo-500/20"
             >
-              Open in Support Queue →
+              <span>View in My Requests</span>
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
             </Link>
             <button
+              type="button"
               onClick={() => setSubmittedTicket(null)}
-              className="text-xs text-slate-600 hover:text-slate-900 font-medium underline"
+              className="text-xs text-stone-300 hover:text-white font-semibold px-4 py-2 rounded-full border border-white/15 bg-white/5 hover:bg-white/10 transition"
             >
-              Submit another ticket
+              Submit Another Request
             </button>
           </div>
         </div>
       )}
 
-      {/* Ticket Intake Form */}
-      <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Input Form */}
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Topic Pills */}
+        <div className="space-y-2">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300">
+            Select Category
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {TOPICS.map(topic => (
+              <button
+                key={topic}
+                type="button"
+                onClick={() => handleSelectTopic(topic)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  selectedTopic === topic
+                    ? 'bg-gradient-to-r from-indigo-500 via-purple-600 to-teal-400 text-white font-semibold shadow-md shadow-indigo-500/20 border border-transparent'
+                    : 'bg-white/5 text-stone-300 hover:bg-white/10 hover:text-white border border-white/10'
+                }`}
+              >
+                {topic}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* User Identity Fields */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-              Customer Name <span className="text-rose-500">*</span>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 mb-1.5">
+              Your Name <span className="text-teal-400">*</span>
             </label>
             <input
               required
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="e.g., Alex Vance"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 shadow-sm focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition"
+              placeholder="e.g. Alex Vance"
+              className="w-full rounded-2xl border border-white/15 bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder-stone-500 focus:bg-white/[0.08] focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/20 transition-all"
             />
           </div>
-
           <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-              Email Address <span className="text-rose-500">*</span>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 mb-1.5">
+              Verified Email
             </label>
-            <input
-              required
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="e.g., alex.vance@company.com"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 shadow-sm focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition"
-            />
+            <div className="relative">
+              <input
+                required
+                type="email"
+                value={email}
+                readOnly
+                className="w-full rounded-2xl border border-white/10 bg-white/[0.02] px-4 py-2.5 text-sm text-stone-400 font-mono cursor-not-allowed"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-emerald-300 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/25">
+                Verified
+              </span>
+            </div>
           </div>
         </div>
 
+        {/* Subject */}
         <div>
-          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-            Subject / Issue Headline <span className="text-rose-500">*</span>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300 mb-1.5">
+            Subject <span className="text-teal-400">*</span>
           </label>
           <input
             required
             value={subject}
             onChange={e => setSubject(e.target.value)}
-            placeholder="Brief summary of the issue..."
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 shadow-sm focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition"
+            placeholder="Brief summary of your question or issue"
+            className="w-full rounded-2xl border border-white/15 bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder-stone-500 focus:bg-white/[0.08] focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/20 transition-all"
           />
         </div>
 
+        {/* Message / Details */}
         <div>
-          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-            Message Body <span className="text-rose-500">*</span>
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-stone-300">
+              Details & Context <span className="text-teal-400">*</span>
+            </label>
+            <span className="text-[11px] text-stone-400">{message.length} characters</span>
+          </div>
           <textarea
             required
             value={message}
             onChange={e => setMessage(e.target.value)}
-            placeholder="Provide all context, error messages, and customer query details..."
-            rows={6}
-            className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm text-slate-800 placeholder-slate-400 shadow-sm focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition"
+            placeholder="Please share all relevant details, error messages, account identifiers, or questions..."
+            rows={5}
+            className="w-full rounded-2xl border border-white/15 bg-white/[0.04] p-4 text-sm text-white placeholder-stone-500 focus:bg-white/[0.08] focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/20 transition-all"
           />
-          <p className="text-[11px] text-slate-400 font-mono mt-1">
-            Gemini AI will automatically triage category, determine urgency, and generate a draft response.
-          </p>
         </div>
 
         {error && (
-          <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800 font-medium">
-            ❌ {error}
+          <div className="rounded-2xl bg-rose-500/10 border border-rose-500/25 p-3.5 text-xs text-rose-300 flex items-start gap-2.5">
+            <svg className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>{error}</span>
           </div>
         )}
 
-        <div className="pt-2 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
+        {/* Action bar */}
+        <div className="pt-2 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-white/10">
           <Link
             href="/dashboard"
-            className="text-xs text-center sm:text-left text-slate-500 hover:text-slate-800 font-medium py-1 sm:py-0"
+            className="text-xs text-center sm:text-left text-stone-400 hover:text-white font-medium transition"
           >
-            ← View Existing Tickets
+            ← Cancel and go to dashboard
           </Link>
-
           <button
             type="submit"
             disabled={loading}
-            className="w-full sm:w-auto inline-flex items-center justify-center px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg shadow-sm transition disabled:opacity-50 active:scale-[0.98]"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-gradient-to-r from-indigo-500 via-purple-600 to-teal-400 hover:opacity-95 text-white font-bold text-xs uppercase tracking-wider rounded-full shadow-lg shadow-indigo-500/25 active:scale-98 disabled:opacity-50 transition-all"
           >
             {loading ? (
-              <span className="flex items-center gap-2">
-                <svg className="animate-spin h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="none">
+              <>
+                <svg className="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                 </svg>
-                Ingesting & Generating Reply...
-              </span>
+                <span>Processing Inquiry…</span>
+              </>
             ) : (
-              'Submit Support Request →'
+              <>
+                <span>Send Request</span>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </>
             )}
           </button>
         </div>
@@ -245,5 +291,3 @@ export default function SupportForm() {
     </div>
   )
 }
-
-

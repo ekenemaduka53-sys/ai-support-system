@@ -1,48 +1,41 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '../../../lib/supabaseClient'
+import { readCustomerSession } from '../../../lib/auth'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export async function GET() {
   try {
-    console.log('\n====== [GET /api/requests] START ======')
-    console.log('Timestamp:', new Date().toISOString())
-    
-    const admin = createAdminSupabase()
-    console.log('✓ Admin client created')
-    
-    // Log the query being executed
-    console.log('Executing: SELECT * FROM support_requests ORDER BY created_at DESC')
-    
-    const { data, error } = await admin.from('support_requests').select('*').order('created_at', { ascending: false })
-    
-    console.log('Query completed:')
-    console.log('  Error:', error ? JSON.stringify(error) : 'null')
-    console.log('  Data type:', typeof data)
-    console.log('  Data is Array:', Array.isArray(data))
-    console.log('  Data length:', data?.length || 0)
-    
-    if (data && data.length > 0) {
-      console.log('  First record ID:', data[0].id)
-      console.log('  First record name:', data[0].name)
+    const session = readCustomerSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Please sign in', requests: [] }, { status: 401 })
     }
-    
-    if (error) {
-      console.error('❌ Supabase error:', error.message)
-      console.error('   Code:', error.code)
-      console.error('   Details:', error.details)
-      return NextResponse.json({ error: `DB fetch failed: ${error.message}`, requests: [] }, { status: 500 })
+
+    try {
+      const admin = createAdminSupabase()
+      const { data, error } = await admin
+        .from('support_requests')
+        .select('id, name, email, subject, message, ai_response, status, category, urgency, created_at, updated_at')
+        .ilike('email', session.email)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.warn('[GET /api/requests] Supabase query warning:', error.message)
+        return NextResponse.json({ error: `Could not load requests: ${error.message}`, requests: [] }, { status: 200 })
+      }
+
+      const own = (data || []).filter(
+        (row) => String(row.email || '').trim().toLowerCase() === session.email
+      )
+
+      return NextResponse.json({ requests: own })
+    } catch (dbErr: any) {
+      console.warn('[GET /api/requests] Database connection warning:', dbErr?.message || dbErr)
+      return NextResponse.json({ requests: [], error: 'Database service is connecting' }, { status: 200 })
     }
-    
-    console.log(`✓ Query successful. Returning ${data?.length || 0} records`)
-    console.log('====== [GET /api/requests] END ======\n')
-    
-    return NextResponse.json({ requests: data || [] })
   } catch (err: any) {
-    console.error('\n❌ [GET /api/requests] Server error:', err.message)
-    console.error('Stack:', err.stack)
-    console.log('====== [GET /api/requests] END (ERROR) ======\n')
-    return NextResponse.json({ error: `Server error: ${err.message}`, requests: [] }, { status: 500 })
+    console.error('[GET /api/requests] Server error:', err.message)
+    return NextResponse.json({ error: err.message || 'Server error', requests: [] }, { status: 500 })
   }
 }
